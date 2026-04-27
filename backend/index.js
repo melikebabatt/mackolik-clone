@@ -8,6 +8,7 @@ dotenv.config();
 const app = express();
 app.use(cors());
 
+const PORT = process.env.PORT || 4000;
 const cache = {};
 
 function getTurkeyDate(daysAgo = 0) {
@@ -40,28 +41,26 @@ function formatMatch(m) {
   };
 }
 
+app.get("/", (req, res) => {
+  res.send("Mackolik Clone Backend is running");
+});
+
 app.get("/api/matches", async (req, res) => {
   try {
     let allMatches = [];
 
-    const liveResponse = await axios.get(
-      "https://v3.football.api-sports.io/fixtures",
-      {
-        params: { live: "all" },
-        headers: { "x-apisports-key": process.env.API_FOOTBALL_KEY },
-      }
-    );
+    const liveResponse = await axios.get("https://v3.football.api-sports.io/fixtures", {
+      params: { live: "all" },
+      headers: { "x-apisports-key": process.env.API_FOOTBALL_KEY },
+    });
 
     allMatches.push(...liveResponse.data.response.map(formatMatch));
 
     for (let i = 0; i < 7; i++) {
-      const response = await axios.get(
-        "https://v3.football.api-sports.io/fixtures",
-        {
-          params: { date: getTurkeyDate(i) },
-          headers: { "x-apisports-key": process.env.API_FOOTBALL_KEY },
-        }
-      );
+      const response = await axios.get("https://v3.football.api-sports.io/fixtures", {
+        params: { date: getTurkeyDate(i) },
+        headers: { "x-apisports-key": process.env.API_FOOTBALL_KEY },
+      });
 
       allMatches.push(...response.data.response.map(formatMatch));
     }
@@ -75,30 +74,24 @@ app.get("/api/matches", async (req, res) => {
       return res.json(uniqueMatches);
     }
 
-    res.json(cache.all || []);
+    return res.json(cache.all || []);
   } catch (err) {
     console.error("API ERROR:", err.response?.data || err.message);
-    res.json(cache.all || []);
+    return res.json(cache.all || []);
   }
 });
 
 app.get("/api/match/:id", async (req, res) => {
   try {
-    const fixtureResponse = await axios.get(
-      "https://v3.football.api-sports.io/fixtures",
-      {
-        params: { id: req.params.id },
-        headers: { "x-apisports-key": process.env.API_FOOTBALL_KEY },
-      }
-    );
+    const fixtureResponse = await axios.get("https://v3.football.api-sports.io/fixtures", {
+      params: { id: req.params.id },
+      headers: { "x-apisports-key": process.env.API_FOOTBALL_KEY },
+    });
 
-    const statsResponse = await axios.get(
-      "https://v3.football.api-sports.io/fixtures/statistics",
-      {
-        params: { fixture: req.params.id },
-        headers: { "x-apisports-key": process.env.API_FOOTBALL_KEY },
-      }
-    );
+    const statsResponse = await axios.get("https://v3.football.api-sports.io/fixtures/statistics", {
+      params: { fixture: req.params.id },
+      headers: { "x-apisports-key": process.env.API_FOOTBALL_KEY },
+    });
 
     res.json({
       match: fixtureResponse.data.response[0],
@@ -110,6 +103,6 @@ app.get("/api/match/:id", async (req, res) => {
   }
 });
 
-app.listen(4000, () => {
-  console.log("Backend running on http://localhost:4000");
+app.listen(PORT, () => {
+  console.log(`Backend running on http://localhost:${PORT}`);
 });
