@@ -9,7 +9,6 @@ const app = express();
 app.use(cors());
 
 const PORT = process.env.PORT || 4000;
-const cache = {};
 
 function getTurkeyDate(daysAgo = 0) {
   const d = new Date();
@@ -47,51 +46,83 @@ app.get("/", (req, res) => {
 
 app.get("/api/matches", async (req, res) => {
   try {
-    let allMatches = [];
+    let matches = [];
 
-    const liveResponse = await axios.get("https://v3.football.api-sports.io/fixtures", {
-      params: { live: "all" },
-      headers: { "x-apisports-key": process.env.API_FOOTBALL_KEY },
-    });
-
-    allMatches.push(...liveResponse.data.response.map(formatMatch));
-
-    for (let i = 0; i < 7; i++) {
-      const response = await axios.get("https://v3.football.api-sports.io/fixtures", {
-        params: { date: getTurkeyDate(i) },
-        headers: { "x-apisports-key": process.env.API_FOOTBALL_KEY },
-      });
-
-      allMatches.push(...response.data.response.map(formatMatch));
-    }
-
-    const uniqueMatches = Array.from(
-      new Map(allMatches.map((m) => [m.id, m])).values()
+    // 1) Önce canlı maçları getir
+    const liveResponse = await axios.get(
+      "https://v3.football.api-sports.io/fixtures",
+      {
+        params: { live: "all" },
+        headers: {
+          "x-apisports-key": process.env.API_FOOTBALL_KEY,
+        },
+      }
     );
 
-    if (uniqueMatches.length > 0) {
-      cache.all = uniqueMatches;
-      return res.json(uniqueMatches);
+    matches = liveResponse.data.response.map(formatMatch);
+
+    // 2) Canlı yoksa bugünkü maçları getir
+    if (matches.length === 0) {
+      const today = getTurkeyDate(0);
+
+      const todayResponse = await axios.get(
+        "https://v3.football.api-sports.io/fixtures",
+        {
+          params: { date: today },
+          headers: {
+            "x-apisports-key": process.env.API_FOOTBALL_KEY,
+          },
+        }
+      );
+
+      matches = todayResponse.data.response.map(formatMatch);
     }
 
-    return res.json(cache.all || []);
+    // 3) Bugün de yoksa sadece dünkü maçları getir
+    if (matches.length === 0) {
+      const yesterday = getTurkeyDate(1);
+
+      const yesterdayResponse = await axios.get(
+        "https://v3.football.api-sports.io/fixtures",
+        {
+          params: { date: yesterday },
+          headers: {
+            "x-apisports-key": process.env.API_FOOTBALL_KEY,
+          },
+        }
+      );
+
+      matches = yesterdayResponse.data.response.map(formatMatch);
+    }
+
+    return res.json(matches);
   } catch (err) {
     console.error("API ERROR:", err.response?.data || err.message);
-    return res.json(cache.all || []);
+    return res.json([]);
   }
 });
 
 app.get("/api/match/:id", async (req, res) => {
   try {
-    const fixtureResponse = await axios.get("https://v3.football.api-sports.io/fixtures", {
-      params: { id: req.params.id },
-      headers: { "x-apisports-key": process.env.API_FOOTBALL_KEY },
-    });
+    const fixtureResponse = await axios.get(
+      "https://v3.football.api-sports.io/fixtures",
+      {
+        params: { id: req.params.id },
+        headers: {
+          "x-apisports-key": process.env.API_FOOTBALL_KEY,
+        },
+      }
+    );
 
-    const statsResponse = await axios.get("https://v3.football.api-sports.io/fixtures/statistics", {
-      params: { fixture: req.params.id },
-      headers: { "x-apisports-key": process.env.API_FOOTBALL_KEY },
-    });
+    const statsResponse = await axios.get(
+      "https://v3.football.api-sports.io/fixtures/statistics",
+      {
+        params: { fixture: req.params.id },
+        headers: {
+          "x-apisports-key": process.env.API_FOOTBALL_KEY,
+        },
+      }
+    );
 
     res.json({
       match: fixtureResponse.data.response[0],

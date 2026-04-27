@@ -64,12 +64,14 @@ function renderEvents(events: any[] = []) {
   return (
     <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
       {important.slice(0, 6).map((e, i) => (
-        <div key={i} style={{ fontSize: 12, color: "inherit", opacity: 0.8 }}>
+        <div key={i} style={{ fontSize: 12, opacity: 0.85 }}>
           {e.time?.elapsed}'{" "}
           {e.type === "Goal" && "⚽"}
           {e.detail === "Yellow Card" && "🟨"}
           {e.detail === "Red Card" && "🟥"}{" "}
-          {e.player?.name || "Oyuncu"} - {e.team?.name}
+          <strong>{e.player?.name || "Oyuncu bilgisi yok"}</strong>
+          {" - "}
+          {e.team?.name || "Takım bilgisi yok"}
         </div>
       ))}
     </div>
@@ -138,6 +140,7 @@ export default function Home() {
   async function loadMatches() {
     try {
       setLoading(true);
+
       const res = await fetch(`${API_BASE}/api/matches`);
       const data = await res.json();
 
@@ -169,7 +172,7 @@ export default function Home() {
 
   useEffect(() => {
     loadMatches();
-    const interval = setInterval(loadMatches, 15000);
+    const interval = setInterval(loadMatches, 30000);
     return () => clearInterval(interval);
   }, [notificationsEnabled]);
 
@@ -257,7 +260,7 @@ export default function Home() {
       {loading && <p>Yükleniyor...</p>}
 
       {!loading && filteredMatches.length === 0 && (
-        <p>Bu filtrede maç bulunamadı.</p>
+        <p>Maç bulunamadı. API şu an veri döndürmüyor olabilir.</p>
       )}
 
       <div style={{ display: "grid", gap: 10 }}>
