@@ -9,17 +9,15 @@ const app = express();
 app.use(cors());
 
 const PORT = process.env.PORT || 4000;
+const API_URL = "https://v3.football.api-sports.io/fixtures";
 
-function getTurkeyDate(daysAgo = 0) {
-  const d = new Date();
-  d.setDate(d.getDate() - daysAgo);
-
+function getTurkeyDate() {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Istanbul",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(d);
+  }).format(new Date());
 }
 
 function formatMatch(m) {
@@ -40,84 +38,75 @@ function formatMatch(m) {
   };
 }
 
+function isLive(status) {
+  return ["1H", "2H", "HT", "ET", "P", "LIVE"].includes(status);
+}
+
 app.get("/", (req, res) => {
   res.send("Mackolik Clone Backend is running");
 });
 
 app.get("/api/matches", async (req, res) => {
   try {
-    let matches = [];
+    const today = getTurkeyDate();
 
-    // 1) Önce canlı maçları getir
-    const liveResponse = await axios.get(
-      "https://v3.football.api-sports.io/fixtures",
-      {
-        params: { live: "all" },
-        headers: {
-          "x-apisports-key": process.env.API_FOOTBALL_KEY,
-        },
+    const response = await axios.get(API_URL, {
+      params: {
+        date: today,
+      },
+      headers: {
+        "x-apisports-key": process.env.API_FOOTBALL_KEY,
+      },
+    });
+
+    let matches = response.data.response.map(formatMatch);
+
+    matches.sort((a, b) => {
+      const aLive = isLive(a.status);
+      const bLive = isLive(b.status);
+
+      // Canlı maçlar en üstte
+      if (aLive !== bLive) {
+        return aLive ? -1 : 1;
       }
+
+      // Sonra saate göre sırala
+      return new Date(a.date).getTime() - new Date(b.date).getTime();
+    });
+
+    console.log(`Bugünün maçları (${today}): ${matches.length}`);
+
+    res.json(matches);
+  } catch (err) {
+    console.error(
+      "API ERROR:",
+      err.response?.data || err.message
     );
 
-    matches = liveResponse.data.response.map(formatMatch);
-
-    // 2) Canlı yoksa bugünkü maçları getir
-    if (matches.length === 0) {
-      const today = getTurkeyDate(0);
-
-      const todayResponse = await axios.get(
-        "https://v3.football.api-sports.io/fixtures",
-        {
-          params: { date: today },
-          headers: {
-            "x-apisports-key": process.env.API_FOOTBALL_KEY,
-          },
-        }
-      );
-
-      matches = todayResponse.data.response.map(formatMatch);
-    }
-
-    // 3) Bugün de yoksa sadece dünkü maçları getir
-    if (matches.length === 0) {
-      const yesterday = getTurkeyDate(1);
-
-      const yesterdayResponse = await axios.get(
-        "https://v3.football.api-sports.io/fixtures",
-        {
-          params: { date: yesterday },
-          headers: {
-            "x-apisports-key": process.env.API_FOOTBALL_KEY,
-          },
-        }
-      );
-
-      matches = yesterdayResponse.data.response.map(formatMatch);
-    }
-
-    return res.json(matches);
-  } catch (err) {
-    console.error("API ERROR:", err.response?.data || err.message);
-    return res.json([]);
+    res.status(500).json({
+      error: "Maçlar alınamadı",
+      matches: [],
+    });
   }
 });
 
 app.get("/api/match/:id", async (req, res) => {
   try {
-    const fixtureResponse = await axios.get(
-      "https://v3.football.api-sports.io/fixtures",
-      {
-        params: { id: req.params.id },
-        headers: {
-          "x-apisports-key": process.env.API_FOOTBALL_KEY,
-        },
-      }
-    );
+    const fixtureResponse = await axios.get(API_URL, {
+      params: {
+        id: req.params.id,
+      },
+      headers: {
+        "x-apisports-key": process.env.API_FOOTBALL_KEY,
+      },
+    });
 
     const statsResponse = await axios.get(
       "https://v3.football.api-sports.io/fixtures/statistics",
       {
-        params: { fixture: req.params.id },
+        params: {
+          fixture: req.params.id,
+        },
         headers: {
           "x-apisports-key": process.env.API_FOOTBALL_KEY,
         },
@@ -129,8 +118,14 @@ app.get("/api/match/:id", async (req, res) => {
       statistics: statsResponse.data.response || [],
     });
   } catch (err) {
-    console.error("DETAIL ERROR:", err.response?.data || err.message);
-    res.status(500).json({ error: "API error" });
+    console.error(
+      "DETAIL ERROR:",
+      err.response?.data || err.message
+    );
+
+    res.status(500).json({
+      error: "API error",
+    });
   }
 });
 
